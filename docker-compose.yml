@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  redis-node-1:
+    image: bitnami/redis-cluster:latest
+    environment:
+      - REDIS_CLUSTER_ENABLED=yes
+      - REDIS_NODE_ID=1
+    networks:
+      - limiter-net
+
+  redis-node-2:
+    image: bitnami/redis-cluster:latest
+    environment:
+      - REDIS_CLUSTER_ENABLED=yes
+      - REDIS_NODE_ID=2
+    networks:
+      - limiter-net
+
+  redis-node-3:
+    image: bitnami/redis-cluster:latest
+    environment:
+      - REDIS_CLUSTER_ENABLED=yes
+      - REDIS_NODE_ID=3
+    networks:
+      - limiter-net
+
+  redis-node-4:
+    image: bitnami/redis-cluster:latest
+    environment:
+      - REDIS_CLUSTER_ENABLED=yes
+      - REDIS_NODE_ID=4
+    networks:
+      - limiter-net
+
+  redis-node-5:
+    image: bitnami/redis-cluster:latest
+    environment:
+      - REDIS_CLUSTER_ENABLED=yes
+      - REDIS_NODE_ID=5
+    networks:
+      - limiter-net
+
+  redis-node-6:
+    image: bitnami/redis-cluster:latest
+    environment:
+      - REDIS_CLUSTER_ENABLED=yes
+      - REDIS_NODE_ID=6
+    networks:
+      - limiter-net
+
+  api-server-1:
+    build: .
+    ports:
+      - "8001:8000"
+    environment:
+      - REDIS_HOST=redis-node-1
+    depends_on:
+      - redis-node-1
+    networks:
+      - limiter-net
+
+  api-server-2:
+    build: .
+    ports:
+      - "8002:8000"
+    environment:
+      - REDIS_HOST=redis-node-1
+    depends_on:
+      - redis-node-1
+    networks:
+      - limiter-net
+
+  api-server-3:
+    build: .
+    ports:
+      - "8003:8000"
+    environment:
+      - REDIS_HOST=redis-node-1
+    depends_on:
+      - redis-node-1
+    networks:
+      - limiter-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - limiter-net
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    networks:
+      - limiter-net
+
+networks:
+  limiter-net:
+    driver: bridge

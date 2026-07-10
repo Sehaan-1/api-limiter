@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'api-servers'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['api-server-1:8000', 'api-server-2:8000', 'api-server-3:8000']

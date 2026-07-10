@@ -1,0 +1,12 @@
+rate_limits:
+  - path: "/payments"
+    method: "POST"
+    capacity: 20
+    refill_rate: 0.33
+  - path: "/health"
+    method: "GET"
+    capacity: 500
+    refill_rate: 8.33
+  - path: "*"
+    capacity: 100
+    refill_rate: 1.67

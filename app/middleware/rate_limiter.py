@@ -36,22 +36,26 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 prometheus.REQUESTS_TOTAL.labels(status="429").inc()
                 prometheus.BLOCKED_TOTAL.inc()
                 retry_after = int((1 - remaining) / rule.refill_rate)
+                reset_time = int(time.time() + (rule.capacity - remaining) / rule.refill_rate)
                 return Response(
                     status_code=429,
                     headers={
                         "X-RateLimit-Limit": str(rule.capacity),
                         "X-RateLimit-Remaining": str(int(remaining)),
-                        "Retry-After": str(retry_after)
+                        "Retry-After": str(retry_after),
+                        "X-RateLimit-Reset": str(reset_time)
                     },
                     content="Too Many Requests"
                 )
 
-            prometheus.REQUESTS_TOTAL.labels(status="200").inc()
+            prometheus.REQUESTS_TOTAL.labels(status="allowed").inc()
             prometheus.ALLOWED_TOTAL.inc()
 
             response = await call_next(request)
+            reset_time = int(time.time() + (rule.capacity - remaining) / rule.refill_rate)
             response.headers["X-RateLimit-Limit"] = str(rule.capacity)
             response.headers["X-RateLimit-Remaining"] = str(int(remaining))
+            response.headers["X-RateLimit-Reset"] = str(reset_time)
             return response
 
         except Exception as e:

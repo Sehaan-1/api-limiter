@@ -43,6 +43,8 @@ def test_allowed_request(app_with_mocks, client):
     assert response.status_code == 200
     assert response.headers["X-RateLimit-Limit"] == "10.0"
     assert response.headers["X-RateLimit-Remaining"] == "9"
+    assert "X-RateLimit-Reset" in response.headers
+    assert int(response.headers["X-RateLimit-Reset"]) > 0
 
 def test_rate_limited_request(app_with_mocks, client):
     app, mock_bucket, mock_config = app_with_mocks
@@ -58,6 +60,8 @@ def test_rate_limited_request(app_with_mocks, client):
     assert response.headers["X-RateLimit-Limit"] == "10.0"
     assert response.headers["X-RateLimit-Remaining"] == "0"
     assert "Retry-After" in response.headers
+    assert "X-RateLimit-Reset" in response.headers
+    assert int(response.headers["X-RateLimit-Reset"]) > 0
 
 def test_fail_open(app_with_mocks, client):
     app, mock_bucket, mock_config = app_with_mocks

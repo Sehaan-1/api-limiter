@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"sort"
 	"sync"
@@ -14,6 +15,8 @@ type Result struct {
 	Status  int
 }
 
+const maxSampleSize = 10000
+
 func main() {
 	concurrency := flag.Int("concurrency", 10, "Number of concurrent workers")
 	duration := flag.Int("duration", 10, "Duration of benchmark in seconds")
@@ -24,11 +27,43 @@ func main() {
 	fmt.Printf("Starting benchmark: %s\n", *targetURL)
 	fmt.Printf("Concurrency: %d, Duration: %ds\n", *concurrency, *duration)
 
-	results := make(chan Result, 1000000)
+	results := make(chan Result, 1000) // Smaller buffer, now drained concurrently
 	var wg sync.WaitGroup
 
 	startTime := time.Now()
 	stopChan := make(chan struct{})
+
+	// Metrics
+	var total, ok200, blocked429 int
+	var latencies []time.Duration
+	var mu sync.Mutex // Protect metrics if accessed outside collector, but collector is single-threaded
+
+	doneCollecting := make(chan struct{})
+	go func() {
+		var successfulRequests int
+		for res := range results {
+			total++
+			if res.Status == http.StatusOK {
+				ok200++
+			} else if res.Status == http.StatusTooManyRequests {
+				blocked429++
+			}
+
+			if res.Status != 0 {
+				successfulRequests++
+				if len(latencies) < maxSampleSize {
+					latencies = append(latencies, res.Latency)
+				} else {
+					// Reservoir sampling: replace with probability maxSampleSize / successfulRequests
+					j := rand.Intn(successfulRequests)
+					if j < maxSampleSize {
+						latencies[j] = res.Latency
+					}
+				}
+			}
+		}
+		close(doneCollecting)
+	}()
 
 	for i := 0; i < *concurrency; i++ {
 		wg.Add(1)
@@ -50,7 +85,6 @@ func main() {
 					latency := time.Since(reqStart)
 
 					if err != nil {
-						// For this benchmark, we count errors as neither 200 nor 429
 						results <- Result{Latency: latency, Status: 0}
 					} else {
 						results <- Result{Latency: latency, Status: resp.StatusCode}
@@ -65,24 +99,13 @@ func main() {
 	close(stopChan)
 	wg.Wait()
 	close(results)
-
-	var latencies []time.Duration
-	var total, ok200, blocked429 int
-
-	for res := range results {
-		total++
-		if res.Status == http.StatusOK {
-			ok200++
-		} else if res.Status == http.StatusTooManyRequests {
-			blocked429++
-		}
-		if res.Status != 0 {
-			latencies = append(latencies, res.Latency)
-		}
-	}
+	<-doneCollecting
 
 	if len(latencies) == 0 {
 		fmt.Println("No successful requests recorded.")
+		fmt.Printf("Total Requests: %d\n", total)
+		fmt.Printf("200 (Allowed): %d\n", ok200)
+		fmt.Printf("429 (Blocked):  %d\n", blocked429)
 		return
 	}
 

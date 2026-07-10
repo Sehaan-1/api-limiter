@@ -30,7 +30,8 @@ class ConfigLoader:
         def watch():
             while True:
                 try:
-                    mtime = os.path.getmtime("config/rate_limits.yaml")
+                    path = os.environ.get("RATE_LIMIT_CONFIG_PATH", "config/rate_limits.yaml")
+                    mtime = os.path.getmtime(path)
                     if mtime > self._last_mtime:
                         self.load_config()
                 except Exception:
@@ -40,7 +41,7 @@ class ConfigLoader:
         threading.Thread(target=watch, daemon=True).start()
 
     def load_config(self):
-        path = "config/rate_limits.yaml"
+        path = os.environ.get("RATE_LIMIT_CONFIG_PATH", "config/rate_limits.yaml")
         try:
             mtime = os.path.getmtime(path)
             with open(path, "r") as f:

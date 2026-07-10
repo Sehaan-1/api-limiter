@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-import redis
+import redis.asyncio as redis
 from prometheus_client import make_asgi_app
 from app.middleware.rate_limiter import RateLimitMiddleware
 from app.limiter.token_bucket import TokenBucket

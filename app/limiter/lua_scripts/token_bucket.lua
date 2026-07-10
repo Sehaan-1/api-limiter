@@ -16,7 +16,7 @@ if tokens >= 1 then
     allowed = 1
 end
 
-redis.call('HMSET', key, 'tokens', tokens, 'last_refill', now)
+redis.call('HSET', key, 'tokens', tokens, 'last_refill', now)
 redis.call('EXPIRE', key, math.ceil(capacity / refill_rate * 2))
 
 return {allowed, tokens}

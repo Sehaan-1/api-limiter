@@ -27,7 +27,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         try:
             start_time = time.time()
-            allowed, remaining = self.token_bucket.consume(
+            allowed, remaining = await self.token_bucket.consume(
                 api_key, path, rule.capacity, rule.refill_rate
             )
             prometheus.REDIS_LATENCY.observe(time.time() - start_time)
@@ -35,7 +35,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             if not allowed:
                 prometheus.REQUESTS_TOTAL.labels(status="429").inc()
                 prometheus.BLOCKED_TOTAL.inc()
-                retry_after = int((1 - remaining) / rule.refill_rate)
+                retry_after = max(1, int((1 - remaining) / rule.refill_rate))
                 reset_time = int(time.time() + (rule.capacity - remaining) / rule.refill_rate)
                 return Response(
                     status_code=429,

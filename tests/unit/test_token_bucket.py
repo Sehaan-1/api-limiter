@@ -1,34 +1,25 @@
-from unittest.mock import MagicMock
+import time
+from unittest.mock import patch
 from fakeredis import FakeRedis
 from app.limiter.token_bucket import TokenBucket
 
 def test_token_bucket_allows_initial_request():
     r = FakeRedis()
     bucket = TokenBucket(r)
+    capacity = 10.0
+    refill_rate = 1.0
 
-    # Mock the Lua script result: {allowed, tokens}
-    bucket.script = MagicMock(return_value=[1, 9.0])
-
-    allowed, remaining = bucket.consume("user1", "/test", 10, 1)
+    allowed, remaining = bucket.consume("user1", "/test", capacity, refill_rate)
     assert allowed is True
-    assert remaining == 9.0
-    bucket.script.assert_called_once()
+    assert remaining == capacity - 1
 
-def test_token_bucket_consumes_until_empty():
+def test_token_bucket_respects_burst_capacity():
     r = FakeRedis()
     bucket = TokenBucket(r)
+    capacity = 5.0
+    refill_rate = 1.0
 
-    # Simulate a sequence of responses from Lua
-    # 5 allowed, then 1 denied
-    bucket.script.side_effect = [[1, 4.0], [1, 3.0], [1, 2.0], [1, 1.0], [1, 0.0], [0, 0.0]]
-    # Wait, I need to mock the script attribute
-    bucket.script = MagicMock()
-    bucket.script.side_effect = [[1, 4.0], [1, 3.0], [1, 2.0], [1, 1.0], [1, 0.0], [0, 0.0]]
-
-    capacity = 5
-    refill_rate = 1
-
-    for _ in range(5):
+    for _ in range(int(capacity)):
         allowed, _ = bucket.consume("user1", "/test", capacity, refill_rate)
         assert allowed is True
 
@@ -36,33 +27,42 @@ def test_token_bucket_consumes_until_empty():
     assert allowed is False
     assert remaining == 0.0
 
-def test_token_bucket_refills():
+def test_token_bucket_refills_over_time():
     r = FakeRedis()
     bucket = TokenBucket(r)
+    capacity = 5.0
+    refill_rate = 1.0
 
-    bucket.script = MagicMock()
-    # First call: deny (0 tokens), Second call: allow (after refill)
-    bucket.script.side_effect = [[0, 0.0], [1, 0.0]]
+    # Use a fixed time to avoid issues with real time
+    start_time = 1000.0
+    with patch('app.limiter.token_bucket.time.time') as mock_time:
+        mock_time.return_value = start_time
 
-    capacity = 5
-    refill_rate = 1
+        # Empty the bucket
+        for _ in range(int(capacity)):
+            bucket.consume("user1", "/test", capacity, refill_rate)
 
-    allowed, _ = bucket.consume("user1", "/test", capacity, refill_rate)
-    assert allowed is False
+        allowed, _ = bucket.consume("user1", "/test", capacity, refill_rate)
+        assert allowed is False
 
-    # simulate time passing by calling consume again
-    allowed, remaining = bucket.consume("user1", "/test", capacity, refill_rate)
-    assert allowed is True
+        # Move forward by 2 seconds
+        mock_time.return_value = start_time + 2
 
-def test_token_bucket_does_not_exceed_capacity():
+        # Should have refilled 2 tokens (2 * refill_rate = 2)
+        # It consumes 1, so remaining should be 1.0
+        allowed, remaining = bucket.consume("user1", "/test", capacity, refill_rate)
+        assert allowed is True
+        assert remaining == 1.0
+
+def test_token_bucket_sets_ttl():
     r = FakeRedis()
     bucket = TokenBucket(r)
+    capacity = 10.0
+    refill_rate = 1.0
 
-    bucket.script = MagicMock(return_value=[1, 4.0])
+    bucket.consume("user1", "/test", capacity, refill_rate)
 
-    capacity = 5
-    refill_rate = 1
-
-    allowed, remaining = bucket.consume("user1", "/test", capacity, refill_rate)
-    assert allowed is True
-    assert remaining == 4.0
+    key = "ratelimit:user1:/test"
+    ttl = r.ttl(key)
+    # Lua: math.ceil(10 / 1 * 2) = 20
+    assert ttl == 20

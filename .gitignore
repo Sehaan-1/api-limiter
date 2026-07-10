@@ -38,3 +38,7 @@ benchmark/*.exe
 
 # Superpowers SDD internal logs (should not be committed)
 .superpowers/
+
+# Local product requirements document (should not be pushed to GitHub)
+prd_distributed_rate_limiter.md
+
